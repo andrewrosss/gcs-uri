@@ -2,7 +2,7 @@
 name = "gcs-uri"
 version = "0.1.0"
 description = ""
-authors = ["Andrew Ross <andrew.ross.mail@gmail.com>"]
+authors = [ "Andrew Ross <andrew.ross.mail@gmail.com>" ]
 license = "MIT"
 
 [tool.poetry.dependencies]
@@ -17,6 +17,10 @@ reorder-python-imports = "^3.0.1"
 bump2version = "^1.0.1"
 pre-commit = "^2.18.1"
 pytest = "^7.1.1"
+
+[tool.pytest.ini_options]
+markers = [ "e2e" ]
+addopts = "-m 'not e2e'"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
