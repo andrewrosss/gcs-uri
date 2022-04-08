@@ -17,6 +17,9 @@ from google.cloud.storage import Blob
 from google.cloud.storage import Client
 
 
+__version__ = "0.1.0"
+
+
 def copy_file(
     src: str | Path | Blob,
     dst: str | Path | Blob,
