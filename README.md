@@ -1,6 +1,6 @@
 # gcs-uri
 
-Simple API to copy files to/from/between Google Cloud Storage
+Simple API to copy files to and from Google Cloud Storage
 
 [![PyPI Version](https://img.shields.io/pypi/v/gcs-uri.svg)](https://pypi.org/project/gcs-uri/)
 
@@ -12,7 +12,7 @@ pip install gcs-uri
 
 ## Usage
 
-`gcs-uri` exposes two functions as it main public api
+`gcs-uri` exposes two functions as its main public API
 
 - `copy_file`
 - `copy_dir`
