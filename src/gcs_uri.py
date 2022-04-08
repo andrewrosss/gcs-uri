@@ -13,14 +13,15 @@ from urllib.parse import unquote_plus
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
-from google.cloud import storage
+from google.cloud.storage import Blob
+from google.cloud.storage import Client
 
 
 def copy_file(
-    src: str | Path | storage.Blob,
-    dst: str | Path | storage.Blob,
+    src: str | Path | Blob,
+    dst: str | Path | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ) -> None:
     """Copy a single file.
@@ -31,10 +32,10 @@ def copy_file(
 
 
 def copy_dir(
-    src: str | Path | storage.Blob,
-    dst: str | Path | storage.Blob,
+    src: str | Path | Blob,
+    dst: str | Path | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ) -> None:
     """Copy a directory (recursively).
@@ -49,11 +50,11 @@ def copy_dir(
 
 
 def _copy(
-    src: str | Path | storage.Blob,
-    dst: str | Path | storage.Blob,
+    src: str | Path | Blob,
+    dst: str | Path | Blob,
     *,
     _scheme_copy_fns: dict[tuple[str, str], Callable],
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ) -> None:
     src_scheme = _parse_scheme(src)
@@ -69,11 +70,11 @@ def _copy(
 
     # one (or both) of src/dst are remote URIs, need to
     # forward the storag client
-    client = client or storage.Client()
+    client = client or Client()
     copy_fn(src, dst, client=client, quiet=quiet)  # type: ignore
 
 
-def _parse_scheme(arg: str | Path | storage.Blob) -> Literal["", "gs"]:
+def _parse_scheme(arg: str | Path | Blob) -> Literal["", "gs"]:
     if isinstance(arg, str):
         scheme = urlparse(arg).scheme
         if scheme in ("", "file"):
@@ -84,7 +85,7 @@ def _parse_scheme(arg: str | Path | storage.Blob) -> Literal["", "gs"]:
             raise ValueError(f"Failed to determine scheme for {arg!r}")
     elif isinstance(arg, Path):
         return ""
-    elif isinstance(arg, storage.Blob):
+    elif isinstance(arg, Blob):
         return "gs"
     else:
         raise ValueError(f"Failed to determine scheme for {arg!r}")
@@ -93,7 +94,7 @@ def _parse_scheme(arg: str | Path | storage.Blob) -> Literal["", "gs"]:
 # --- UTILITY FUNCTIONS ---
 
 
-def _blob_to_uri(blob: storage.Blob) -> str:
+def _blob_to_uri(blob: Blob) -> str:
     components = ("gs", blob.bucket.name, blob.name, "", "", "")
     return urlunparse(components)
 
@@ -109,7 +110,7 @@ def _uri_to_filename(uri: str | Path) -> str:
 
 
 def _log_successful_copy(
-    src: str | Path | storage.Blob,
+    src: str | Path | Blob,
     *,
     n: int | None = 1,
     N: int | None = 1,
@@ -145,15 +146,15 @@ def _sync_files(src: str | Path, dst: str | Path, *, quiet: bool = False):
 
 
 def _download_file(
-    src: str | storage.Blob,
+    src: str | Blob,
     dst: str | Path,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """remote blob -> local file"""
-    client = client or storage.Client()
-    _src = storage.Blob.from_string(src, client=client) if isinstance(src, str) else src
+    client = client or Client()
+    _src = Blob.from_string(src, client=client) if isinstance(src, str) else src
     _dst = _uri_to_filename(dst)
     if op.isdir(_dst):
         filename = op.join(_dst, op.basename(_src.name))
@@ -166,15 +167,15 @@ def _download_file(
 
 def _upload_file(
     src: str | Path,
-    dst: str | storage.Blob,
+    dst: str | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """local file -> remote blob"""
-    client = client or storage.Client()
+    client = client or Client()
     _src = _uri_to_filename(src)
-    _dst = storage.Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
+    _dst = Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
     if cast(str, _dst.name).endswith("/"):
         _dst.name = op.join(_dst.name, op.basename(_src))
     _dst.upload_from_filename(_src)
@@ -183,17 +184,17 @@ def _upload_file(
 
 
 def _download_dir(
-    src: str | storage.Blob,
+    src: str | Blob,
     dst: str | Path,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """remote dir -> local dir"""
-    client = client or storage.Client()
-    _src = storage.Blob.from_string(src, client=client) if isinstance(src, str) else src
+    _client = client or Client()
+    _src = Blob.from_string(src, client=_client) if isinstance(src, str) else src
     _dst = _uri_to_filename(dst)
-    blobs: list[storage.Blob] = list(client.list_blobs(_src.bucket, prefix=_src.name))
+    blobs: list[Blob] = list(_client.list_blobs(_src.bucket, prefix=_src.name))
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # submit each of the download jobs to the thread pool
@@ -216,15 +217,15 @@ def _download_dir(
 
 def _upload_dir(
     src: str | Path,
-    dst: str | storage.Blob,
+    dst: str | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """local dir -> remote dir"""
-    client = client or storage.Client()
+    client = client or Client()
     _src = _uri_to_filename(src)
-    _dst = storage.Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
+    _dst = Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
     pattern = op.join(_src, "**")
     files = [f for f in glob.glob(pattern, recursive=True) if op.isfile(f)]
 
@@ -234,7 +235,7 @@ def _upload_dir(
         for filename in files:
             relpath = op.relpath(filename, _src)
             name = op.join(_dst.name, relpath)
-            b = storage.Blob(name, _dst.bucket)
+            b = Blob(name, _dst.bucket)
             future = executor.submit(b.upload_from_filename, filename)
             future_to_filename[future] = filename
 
@@ -248,16 +249,16 @@ def _upload_dir(
 
 
 def _copy_blob(
-    src: str | storage.Blob,
-    dst: str | storage.Blob,
+    src: str | Blob,
+    dst: str | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """remote blob -> remote blob"""
-    client = client or storage.Client()
-    _src = storage.Blob.from_string(src, client=client) if isinstance(src, str) else src
-    _dst = storage.Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
+    client = client or Client()
+    _src = Blob.from_string(src, client=client) if isinstance(src, str) else src
+    _dst = Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
     src_is_dir = cast(str, _src.name).endswith("/")
     dst_is_dir = cast(str, _dst.name).endswith("/")
     if dst_is_dir and not src_is_dir:
@@ -268,32 +269,32 @@ def _copy_blob(
 
 
 def _sync_blobs(
-    src: str | storage.Blob,
-    dst: str | storage.Blob,
+    src: str | Blob,
+    dst: str | Blob,
     *,
-    client: storage.Client | None = None,
+    client: Client | None = None,
     quiet: bool = False,
 ):
     """remote dir -> remote dir"""
-    client = client or storage.Client()
-    src = storage.Blob.from_string(src, client=client) if isinstance(src, str) else src
-    dst = storage.Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
-    src_blobs: list[storage.Blob] = list(client.list_blobs(src.bucket, prefix=src.name))
+    _client = client or Client()
+    _src = Blob.from_string(src, client=_client) if isinstance(src, str) else src
+    _dst = Blob.from_string(dst, client=_client) if isinstance(dst, str) else dst
+    src_blobs: list[Blob] = list(_client.list_blobs(_src.bucket, prefix=_src.name))
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # submit each of the download jobs to the thread pool
-        future_to_blob: dict[concurrent.futures.Future[None], storage.Blob] = {}
+        future_to_blob: dict[concurrent.futures.Future[None], Blob] = {}
         for src_blob in src_blobs:
-            relpath = op.relpath(src_blob.name, src.name)
-            new_name = op.join(dst.name, relpath)
-            dst_blob = storage.Blob(new_name, dst.bucket)
+            relpath = op.relpath(src_blob.name, _src.name)
+            new_name = op.join(_dst.name, relpath)
+            dst_blob = Blob(new_name, _dst.bucket)
             _src_uri = _blob_to_uri(src_blob)
             _dst_uri = _blob_to_uri(dst_blob)
             future = executor.submit(
                 _copy_blob,
                 _src_uri,
                 _dst_uri,
-                client=client,
+                client=_client,
                 quiet=True,
             )
             future_to_blob[future] = src_blob
