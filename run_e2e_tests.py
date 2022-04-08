@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import os.path as op
 from typing import NoReturn
 
 import pytest

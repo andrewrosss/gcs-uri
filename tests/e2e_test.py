@@ -98,7 +98,8 @@ def remote_blobs(
 
 @pytest.fixture
 def local_files(
-    tmp_path: Path, filenames: tuple[str, ...]
+    tmp_path: Path,
+    filenames: tuple[str, ...],
 ) -> tuple[str, tuple[str, ...]]:
     root = tmp_path / "__test_files__"
     paths: list[str] = []
@@ -129,7 +130,8 @@ def test_local_file_to_local_file(local_files: tuple[str, tuple[str, ...]]):
 
 @pytest.mark.e2e
 def test_local_dir_to_local_dir(
-    tmp_path: Path, local_files: tuple[str, tuple[str, ...]]
+    tmp_path: Path,
+    local_files: tuple[str, tuple[str, ...]],
 ):
     src, filenames = local_files
     dst = tmp_path / "dst"
@@ -190,7 +192,8 @@ def test_local_dir_to_remote_dir(
 
 @pytest.mark.e2e
 def test_remote_file_to_local_file(
-    tmp_path: Path, remote_blobs: tuple[storage.Blob, list[storage.Blob]]
+    tmp_path: Path,
+    remote_blobs: tuple[storage.Blob, list[storage.Blob]],
 ):
     _, blobs = remote_blobs
     src = blobs[0]
@@ -209,7 +212,8 @@ def test_remote_file_to_local_file(
 
 @pytest.mark.e2e
 def test_remote_dir_to_local_dir(
-    tmp_path: Path, remote_blobs: tuple[storage.Blob, list[storage.Blob]]
+    tmp_path: Path,
+    remote_blobs: tuple[storage.Blob, list[storage.Blob]],
 ):
     src, blobs = remote_blobs
     dst = tmp_path / "dst"
@@ -226,13 +230,15 @@ def test_remote_dir_to_local_dir(
 
 @pytest.mark.e2e
 def test_remote_file_to_remote_file(
-    storage_root: storage.Blob, remote_blobs: tuple[storage.Blob, list[storage.Blob]]
+    storage_root: storage.Blob,
+    remote_blobs: tuple[storage.Blob, list[storage.Blob]],
 ):
     _, blobs = remote_blobs
     src = blobs[0]
 
     dst = storage.Blob(
-        op.join(storage_root.name, "test.txt"), bucket=storage_root.bucket
+        op.join(storage_root.name, "test.txt"),
+        bucket=storage_root.bucket,
     )
     dst_uri = f"gs://{dst.bucket.name}/{dst.name}"
 
@@ -245,7 +251,8 @@ def test_remote_file_to_remote_file(
 
 @pytest.mark.e2e
 def test_remote_dir_to_remote_dir(
-    storage_root: storage.Blob, remote_blobs: tuple[storage.Blob, list[storage.Blob]]
+    storage_root: storage.Blob,
+    remote_blobs: tuple[storage.Blob, list[storage.Blob]],
 ):
     src, blobs = remote_blobs
 

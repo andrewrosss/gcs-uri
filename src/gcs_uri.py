@@ -109,7 +109,10 @@ def _uri_to_filename(uri: str | Path) -> str:
 
 
 def _log_successful_copy(
-    src: str | Path | storage.Blob, *, n: int | None = 1, N: int | None = 1
+    src: str | Path | storage.Blob,
+    *,
+    n: int | None = 1,
+    N: int | None = 1,
 ):
     uri = _filename_to_uri(src) if isinstance(src, (str, Path)) else _blob_to_uri(src)
     prefix = "" if None in (n, N) else f"[{n}/{N}] - "
@@ -287,7 +290,11 @@ def _sync_blobs(
             _src_uri = _blob_to_uri(src_blob)
             _dst_uri = _blob_to_uri(dst_blob)
             future = executor.submit(
-                _copy_blob, _src_uri, _dst_uri, client=client, quiet=True
+                _copy_blob,
+                _src_uri,
+                _dst_uri,
+                client=client,
+                quiet=True,
             )
             future_to_blob[future] = src_blob
 
