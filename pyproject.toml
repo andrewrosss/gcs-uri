@@ -5,6 +5,24 @@ description = "Simple API to copy files to and from Google Cloud Storage"
 authors = [ "Andrew Ross <andrew.ross.mail@gmail.com>" ]
 license = "MIT"
 
+readme = "README.md"
+
+keywords = ["google", "cloud", "storage", 'gcp']
+
+homepage = "https://github.com/andrewrosss/gcs-uri"
+repository = "https://github.com/andrewrosss/gcs-uri"
+documentation = "https://github.com/andrewrosss/gcs-uri"
+
+classifiers = [
+    "Programming Language :: Python :: 3.0",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+
 [tool.poetry.dependencies]
 python = "^3.8"
 google-cloud-storage = "^2.0.0"
