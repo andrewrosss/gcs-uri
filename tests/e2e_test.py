@@ -143,6 +143,9 @@ def test_local_dir_to_local_dir(
 
     copied_files = list(p for p in Path(dst).rglob("*") if p.is_file())
     assert len(copied_files) == len(filenames)
+    for fn in filenames:
+        rp = op.relpath(fn, src)
+        assert dst / rp in copied_files
 
 
 @pytest.mark.e2e
@@ -188,6 +191,10 @@ def test_local_dir_to_remote_dir(
     remote_blob_it = storage_root.bucket.list_blobs(prefix=storage_root.name)
     remote_blobs = [b for b in remote_blob_it if b.name.endswith(".txt")]
     assert len(remote_blobs) == len(filenames)
+    for fn in filenames:
+        rp = op.relpath(fn, src)
+        expected_name = op.join(dst.name, rp)
+        assert any(expected_name == b.name for b in remote_blobs)
 
 
 @pytest.mark.e2e
@@ -226,6 +233,9 @@ def test_remote_dir_to_local_dir(
 
     local_files = [p for p in dst.rglob("*.txt")]
     assert len(local_files) == len(blobs)
+    for b in blobs:
+        rp = op.relpath(b.name, src.name)
+        assert dst / rp in local_files  # type: ignore
 
 
 @pytest.mark.e2e
@@ -267,3 +277,7 @@ def test_remote_dir_to_remote_dir(
 
     dst_blobs = list(dst.bucket.list_blobs(prefix=dst.name))
     assert len(dst_blobs) == len(blobs)
+    for src_blob in blobs:
+        rp = op.relpath(src_blob.name, src.name)
+        expected_name = op.join(dst.name, rp)
+        assert any(dst_blob.name == expected_name for dst_blob in dst_blobs)
