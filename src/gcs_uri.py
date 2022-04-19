@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from urllib.parse import urlunparse
 
 from google.cloud.storage import Blob
+from google.cloud.storage import Bucket
 from google.cloud.storage import Client
 
 
@@ -70,7 +71,10 @@ def copy_files(
     if isinstance(dsts, (str, Path)):
         _dsts = [op.join(dsts, _flatten(src)) for src in srcs]
     elif isinstance(dsts, Blob):
-        _dsts = [Blob(op.join(dsts.name, _flatten(src)), dsts.bucket) for src in srcs]
+        blob_name: str = dsts.name or ""  # type: ignore
+        bucket: Bucket = dsts.bucket  # type: ignore
+        names = [op.join(blob_name, _flatten(src)) for src in srcs]
+        _dsts = [Blob(name, bucket) for name in names]
     else:
         _dsts = dsts
 
