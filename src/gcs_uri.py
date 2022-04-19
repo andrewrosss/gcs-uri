@@ -9,7 +9,6 @@ import shutil
 from pathlib import Path
 from typing import Callable
 from typing import cast
-from typing import Literal
 from typing import Sequence
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
@@ -122,7 +121,7 @@ def _copy(
     copy_fn(src, dst, client=client, quiet=quiet)  # type: ignore
 
 
-def _parse_scheme(arg: str | Path | Blob) -> Literal["", "gs"]:
+def _parse_scheme(arg: str | Path | Blob) -> str:
     if isinstance(arg, str):
         scheme = urlparse(arg).scheme
         if scheme in ("", "file"):
@@ -168,6 +167,17 @@ def _log_successful_copy(
     print(f"{prefix}Copied {uri!r}")
 
 
+def _log_skipping_file(
+    src: str | Path,
+    *,
+    n: int | None = 1,
+    N: int | None = 1,
+) -> None:
+    uri = _filename_to_uri(src)
+    prefix = "" if None in (n, N) else f"[{n}/{N}] - "
+    print(f"{prefix}Skipping {uri!r}")
+
+
 def _flatten(spb: str | Path | Blob) -> str:
     """Convert a URI (local or remote) to a flat filename.
 
@@ -210,16 +220,24 @@ def _copy_file(src: str | Path, dst: str | Path, *, quiet: bool = False):
 def _sync_files(src: str | Path, dst: str | Path, *, quiet: bool = False):
     """local dir -> local dir"""
 
-    def _copy_fn_factory(quiet: bool):
-        def _copy_fn(src: str, dst: str):
-            """Wrapper around copy2 with some optional logging"""
-            shutil.copy2(src, dst)
+    # NOTE: to support python3.7 we do our own recursive copying
+    # If support for python3.7 is dropped, change this back to the
+    # implementation here:
+    # https://github.com/andrewrosss/gcs-uri/blob/0fd3d4b8fbae947721c9e099a1239e3c551d13ed/src/gcs_uri.py#L213-L222  # noqa: E501
+    srcroot = Path(src)
+    srcpaths = list(srcroot.rglob("*"))
+    for i, srcpath in enumerate(srcpaths):
+        relpath = srcpath.relative_to(srcroot)
+        dstpath = Path(dst) / relpath
+        if srcpath.is_dir():
+            dstpath.mkdir(exist_ok=True)
+        elif srcpath.is_file():
+            shutil.copy2(srcpath, dstpath)
             if not quiet:
-                _log_successful_copy(src, n=None, N=None)
-
-        return _copy_fn
-
-    shutil.copytree(src, dst, dirs_exist_ok=True, copy_function=_copy_fn_factory(quiet))
+                _log_successful_copy(srcpath, n=i, N=len(srcpaths))
+        else:
+            if not quiet:
+                _log_skipping_file(srcpath, n=i, N=len(srcpaths))
 
 
 def _download_file(
