@@ -19,7 +19,7 @@ from google.cloud.storage import Bucket
 from google.cloud.storage import Client
 
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 
 def copy_file(
