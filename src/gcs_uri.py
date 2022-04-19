@@ -4,11 +4,13 @@ import concurrent.futures
 import glob
 import os
 import os.path as op
+import re
 import shutil
 from pathlib import Path
 from typing import Callable
 from typing import cast
 from typing import Literal
+from typing import Sequence
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
@@ -47,6 +49,45 @@ def copy_dir(
     then `client` is ignored.
     """
     return _copy(src, dst, _scheme_copy_fns=_DIR_FUNCTIONS, client=client, quiet=quiet)
+
+
+def copy_files(
+    srcs: Sequence[str | Path | Blob],
+    dsts: str | Path | Blob | Sequence[str | Path | Blob],
+    *,
+    client: Client | None = None,
+    quiet: bool = False,
+) -> None:
+    """Copy a list of files.
+
+    If `dsts` is a `str | Path | Blob` it is treated as a directory
+    and each of the files in `srcs` will have its name "flattened" and will be
+    copied under `dsts`.
+
+    if `dsts` is a `Sequence[str | Path | Blob]` it is zipped with `srcs`, i.e.
+    each file in `srcs` is copied to its corresponding entry in `dsts`.
+    """
+    if isinstance(dsts, (str, Path)):
+        _dsts = [op.join(dsts, _flatten(src)) for src in srcs]
+    elif isinstance(dsts, Blob):
+        _dsts = [Blob(op.join(dsts.name, _flatten(src)), dsts.bucket) for src in srcs]
+    else:
+        _dsts = dsts
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # submit each of the file-copy jobs to the thread pool
+        future_to_src: dict[concurrent.futures.Future[None], str | Path | Blob] = {}
+        for src, dst in zip(srcs, _dsts):
+            future = executor.submit(copy_file, src, dst, client=client, quiet=True)
+            future_to_src[future] = src
+
+        # report the status of each copied file
+        completed_futures = concurrent.futures.as_completed(future_to_src)
+        for i, future in enumerate(completed_futures, 1):
+            src = future_to_src[future]
+            future.result()
+            if not quiet:
+                _log_successful_copy(src, n=i, N=len(future_to_src))
 
 
 # --- PRIVATE API ---
@@ -123,6 +164,35 @@ def _log_successful_copy(
     print(f"{prefix}Copied {uri!r}")
 
 
+def _flatten(spb: str | Path | Blob) -> str:
+    """Convert a URI (local or remote) to a flat filename.
+
+    Examples:
+        >>> _flatten('.cache/dir/file.txt')
+        '.cache-dir-file.txt'
+        >>> _flatten('/abs/path to  some/file.tar.gz')
+        'abs-path-to-some-file.tar.gz'
+        >>> _flatten('gs://bkt/some/blob/')
+        'gs-bkt-some-blob'
+        >>> _flatten('gs://bkt')
+        'gs-bkt'
+        >>> # can pass Path objects:
+        >>> from pathlib import Path
+        >>> fp = Path('path/to/my/file.csv')
+        >>> _flatten(fp)
+        'path-to-my-file.csv'
+        >>> # can pass storage.Blob
+        >>> from google.cloud.storage import Blob
+        >>> blob = Blob.from_string('gs://bkt/my/module.py')
+        >>> _flatten(blob)
+        'bkt-my-module.py'
+    """
+    s = str(spb) if isinstance(spb, (str, Path)) else _blob_to_uri(spb)
+    filename_s = re.sub(r"[^0-9a-zA-Z_\.-]+", "-", s)  # remove non-(alnum | _ | . | -)
+    filename_s = re.sub(r"(^-+|-+$)", "", filename_s)  # remove leading/trailing '-'
+    return filename_s
+
+
 # --- COPY FUNCTION IMPLEMENTATIONS ---
 
 
@@ -163,7 +233,7 @@ def _download_file(
         filename = op.join(_dst, op.basename(_src.name))
     else:
         filename = _dst
-    _src.download_to_filename(filename)
+    _src.download_to_filename(filename, client=client)
     if not quiet:
         _log_successful_copy(_src)
 
@@ -181,7 +251,7 @@ def _upload_file(
     _dst = Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
     if cast(str, _dst.name).endswith("/"):
         _dst.name = op.join(_dst.name, op.basename(_src))
-    _dst.upload_from_filename(_src)
+    _dst.upload_from_filename(_src, client=client)
     if not quiet:
         _log_successful_copy(_src)
 
@@ -206,7 +276,7 @@ def _download_dir(
             relpath = op.relpath(b.name, _src.name or "")
             filename = op.join(_dst, relpath)  # type: ignore
             os.makedirs(op.dirname(filename), exist_ok=True)
-            future = executor.submit(b.download_to_filename, filename)
+            future = executor.submit(b.download_to_filename, filename, client=client)
             future_to_uri[future] = _blob_to_uri(b)
 
         # report the status of each downloaded file
@@ -239,7 +309,7 @@ def _upload_dir(
             relpath = op.relpath(filename, _src)
             name = op.join(_dst.name, relpath)
             b = Blob(name, _dst.bucket)
-            future = executor.submit(b.upload_from_filename, filename)
+            future = executor.submit(b.upload_from_filename, filename, client=client)
             future_to_filename[future] = filename
 
         # report the status of each downloaded file
@@ -266,7 +336,7 @@ def _copy_blob(
     dst_is_dir = cast(str, _dst.name).endswith("/")
     if dst_is_dir and not src_is_dir:
         _dst.name = op.join(_dst.name, op.basename(_src.name))
-    _src.bucket.copy_blob(_src, _dst.bucket, _dst.name)
+    _src.bucket.copy_blob(_src, _dst.bucket, _dst.name, client=client)
     if not quiet:
         _log_successful_copy(_dst)
 
