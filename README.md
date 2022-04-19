@@ -12,18 +12,23 @@ pip install gcs-uri
 
 ## Usage
 
-`gcs-uri` exposes two functions as its main public API
+`gcs-uri` exposes the following functions as its main public API
 
 - `copy_file`
 - `copy_dir`
+- `copy_files`
 
-These two functions do exactly what they sound like they do.
+These functions do exactly what they sound like they do.
 
 `copy_file` will copy a source file (either a local file or a remote blob in GCS) to destination file (either a local file or remote blob in GCS).
 
 `copy_dir` will recursively copy the contents of a directory (either a local directory or a remote "directory" in GCS) to a destination directory (either a local directory or a remote "directory" in GCS)
 
-The idea being that you can pass just about any object to these two functions and the functions will figures how to do the copying.
+`copy_files` will copy a list of source files (either local files or remote blobs in GCS or a mix of local files/remote blobs) to a corresponding set of destination files (either local files or remote blobs in GCS of a mix of local files/remote blobs)
+
+> If the second argument to `copy_files` is of type `str | Path | Blob` (as opposed to a Sequence), then this argument is treated like a directory and each of the source files are "flattened" (i.e. folder delimiters are removed) and copied under the destintation directory.
+
+The idea being that you can pass just about any object to these functions and the functions will figures how to do the copying.
 
 ## Examples
 
@@ -153,6 +158,76 @@ src = 'gs://my-bkt/src'
 dst = 'gs://my-other-bkt/dst'
 
 copy_dir(src, dst)
+```
+
+### List of local files -> list of remote files
+
+```python
+srcs = ['/my/src/file1.txt', '/my/src/file2.txt']
+dsts = ['gs://my-bkt/dst/file1.txt', 'gs://my-bkt/dst/file2.txt']
+
+copy_files(srcs, dsts)
+# copies: /my/src/file1.txt -> gs://my-bkt/dst/file1.txt
+# copies: /my/src/file2.txt -> gs://my-bkt/dst/file2.txt
+```
+
+### List of local files -> remote dir
+
+```python
+srcs = ['/my/src/file1.txt', '/my/src/file2.txt']
+dst = 'gs://my-bkt/dst'
+
+copy_files(srcs, dst)
+# copies: /my/src/file1.txt -> gs://my-bkt/dst/my-src-file1.txt
+# copies: /my/src/file2.txt -> gs://my-bkt/dst/my-src-file2.txt
+```
+
+## API
+
+```python
+# src/gcs_uri.py
+
+def copy_file(
+    src: str | Path | Blob,
+    dst: str | Path | Blob,
+    *,
+    client: Client | None = None,
+    quiet: bool = False,
+) -> None:
+    """Copy a single file.
+
+    If `src` and `dst` are both determined to be local files then `client` is ignored.
+    """
+
+def copy_dir(
+    src: str | Path | Blob,
+    dst: str | Path | Blob,
+    *,
+    client: Client | None = None,
+    quiet: bool = False,
+) -> None:
+    """Copy a directory (recursively).
+
+    If `src` and `dst` are both determined to be local directories
+    then `client` is ignored.
+    """
+
+def copy_files(
+    srcs: Sequence[str | Path | Blob],
+    dsts: str | Path | Blob | Sequence[str | Path | Blob],
+    *,
+    client: Client | None = None,
+    quiet: bool = False,
+) -> None:
+    """Copy a list of files.
+
+    If `dsts` is a `str | Path | Blob` it is treated as a directory
+    and each of the files in `srcs` will have its name "flattened" and will be
+    copied under `dsts`.
+
+    if `dsts` is a `Sequence[str | Path | Blob]` it is zipped with `srcs`, i.e.
+    each file in `srcs` is copied to its corresponding entry in `dsts`.
+    """
 ```
 
 ## Tests
