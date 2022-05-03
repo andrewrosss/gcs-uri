@@ -21,6 +21,9 @@ from urllib.parse import urlunparse
 from google.cloud.storage import Blob
 from google.cloud.storage import Bucket
 from google.cloud.storage import Client
+from google.cloud.storage.retry import ConditionalRetryPolicy
+from google.cloud.storage.retry import DEFAULT_RETRY
+from google.cloud.storage.retry import is_generation_specified
 
 if sys.version_info < (3, 10):
     from typing_extensions import ParamSpec
@@ -29,6 +32,23 @@ else:
 
 
 __version__ = "1.2.0"
+
+# Custom retry with more rapid attempts as well as more time to retry
+_RETRY = DEFAULT_RETRY.with_deadline(600.0).with_delay(multiplier=1.2)
+
+# Custom conditional retry composing the custom retry defined above
+_CONDITIONAL_RETRY = ConditionalRetryPolicy(
+    _RETRY,
+    is_generation_specified,
+    ["query_params"],
+)
+
+# To enable uploading on slower connections we use a lower chunk_size
+# for uploads and downloads, to understand why see this github issue:
+# https://github.com/googleapis/python-storage/issues/74
+# and specifically this comment:
+# https://github.com/googleapis/python-storage/issues/74#issuecomment-603296568
+_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 def copy_file(
@@ -284,12 +304,13 @@ def _download_file(
     """remote blob -> local file"""
     client = client or Client()
     _src = Blob.from_string(src, client=client) if isinstance(src, str) else src
+    _src.chunk_size = _CHUNK_SIZE
     _dst = _uri_to_filename(dst)
     if op.isdir(_dst):
         filename = op.join(_dst, op.basename(_src.name))
     else:
         filename = _dst
-    _src.download_to_filename(filename, client=client)
+    _src.download_to_filename(filename, client=client, retry=_RETRY)
     if not quiet:
         _log_successful_copy(_src)
 
@@ -306,9 +327,10 @@ def _upload_file(
     client = client or Client()
     _src = _uri_to_filename(src)
     _dst = Blob.from_string(dst, client=client) if isinstance(dst, str) else dst
+    _dst.chunk_size = _CHUNK_SIZE
     if cast(str, _dst.name).endswith("/"):
         _dst.name = op.join(_dst.name, op.basename(_src))
-    _dst.upload_from_filename(_src, client=client)
+    _dst.upload_from_filename(_src, client=client, retry=_CONDITIONAL_RETRY)
     if not quiet:
         _log_successful_copy(_src)
 
@@ -334,7 +356,13 @@ def _download_dir(
             relpath = op.relpath(b.name, _src.name or "")
             filename = op.join(_dst, relpath)  # type: ignore
             os.makedirs(op.dirname(filename), exist_ok=True)
-            future = executor.submit(b.download_to_filename, filename, client=client)
+            b.chunk_size = _CHUNK_SIZE
+            future = executor.submit(
+                b.download_to_filename,
+                filename,
+                client=client,
+                retry=_RETRY,
+            )
             future_to_uri[future] = _blob_to_uri(b)
 
         # report the status of each downloaded file
@@ -368,7 +396,13 @@ def _upload_dir(
             relpath = op.relpath(filename, _src)
             name = op.join(_dst.name, relpath)
             b = Blob(name, _dst.bucket)
-            future = executor.submit(b.upload_from_filename, filename, client=client)
+            b.chunk_size = _CHUNK_SIZE
+            future = executor.submit(
+                b.upload_from_filename,
+                filename,
+                client=client,
+                retry=_CONDITIONAL_RETRY,
+            )
             future_to_filename[future] = filename
 
         # report the status of each downloaded file
