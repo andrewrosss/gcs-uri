@@ -29,7 +29,7 @@ repos:
           - "--max-line-length=88"
           - "--min-python-version=3.7.0"
   - repo: https://github.com/asottile/reorder_python_imports
-    rev: v3.0.1
+    rev: v3.1.0
     hooks:
       - id: reorder-python-imports
         args: [--py3-plus, "--application-directories=.:src"]
