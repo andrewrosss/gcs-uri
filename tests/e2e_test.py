@@ -7,9 +7,12 @@ from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
+from unittest.mock import MagicMock
+from unittest.mock import patch
 from urllib.parse import urlunparse
 
 import pytest
+from google.api_core.exceptions import ServiceUnavailable
 from google.cloud import storage
 
 from gcs_uri import _blob_to_uri
@@ -575,3 +578,47 @@ def test_copy_files_remote_list_to_remote_dir(
     for blob in dst_blobs:
         basename = op.basename(blob.name)
         assert basename in flat_names
+
+
+# --- EXCEPTIONS LOGGING ---
+
+
+@pytest.mark.e2e
+def test_local_copy_exception_is_logged(capsys: pytest.CaptureFixture):
+    src = "/fake/src.txt"
+    dst = "/fake/dst.txt"
+    with patch("shutil.copy2") as mock, pytest.raises(FileNotFoundError):
+        mock.side_effect = FileNotFoundError
+
+        copy_file(src, dst)
+
+    captured = capsys.readouterr()
+    assert src in captured.out
+    assert "attempt took" in captured.out
+
+
+@pytest.mark.e2e
+def test_upload_exception_is_logged(tmp_path: Path, capsys: pytest.CaptureFixture):
+    src = tmp_path / "t.txt"
+    src.write_text("")
+    dst = storage.Blob.from_string("gs://my-fake-bucket-akljsdf/dst.txt")
+    dst.upload_from_filename = MagicMock(side_effect=ServiceUnavailable("message"))
+    with pytest.raises(ServiceUnavailable):
+        copy_file(src, dst)
+
+    captured = capsys.readouterr()
+    assert str(src) in captured.out
+    assert "attempt took" in captured.out
+
+
+@pytest.mark.e2e
+def test_download_exception_is_logged(tmp_path: Path, capsys: pytest.CaptureFixture):
+    src = storage.Blob.from_string("gs://my-fake-bucket-akljsdf/src.txt")
+    src.download_to_filename = MagicMock(side_effect=ServiceUnavailable("message"))
+    dst = tmp_path / "t.txt"
+    with pytest.raises(ServiceUnavailable):
+        copy_file(src, dst)
+
+    captured = capsys.readouterr()
+    assert str(src) in captured.out
+    assert "attempt took" in captured.out
