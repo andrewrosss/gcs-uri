@@ -31,7 +31,7 @@ else:
     from typing import ParamSpec
 
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # Resources describing the retry strategy:
 # https://cloud.google.com/storage/docs/retry-strategy#client-libraries
