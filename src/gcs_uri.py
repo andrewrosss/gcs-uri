@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import concurrent.futures
+import datetime
+import functools
 import glob
 import os
 import os.path as op
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import Callable
 from typing import cast
 from typing import Sequence
+from typing import TypeVar
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
 from urllib.parse import urlunparse
@@ -17,6 +21,11 @@ from urllib.parse import urlunparse
 from google.cloud.storage import Blob
 from google.cloud.storage import Bucket
 from google.cloud.storage import Client
+
+if sys.version_info < (3, 10):
+    from typing_extensions import ParamSpec
+else:
+    from typing import ParamSpec
 
 
 __version__ = "1.2.0"
@@ -178,6 +187,17 @@ def _log_skipping_file(
     print(f"{prefix}Skipping {uri!r}")
 
 
+def _log_failed_copy(
+    src: str | Path | Blob,
+    *,
+    elapsed_time: datetime.timedelta | None = None,
+):
+    msg = f"ERROR: Failed to copy {src!r}"
+    if elapsed_time is not None:
+        msg += f" (copy attempt took {elapsed_time.total_seconds():.6f}s)"
+    print(msg)
+
+
 def _flatten(spb: str | Path | Blob) -> str:
     """Convert a URI (local or remote) to a flat filename.
 
@@ -207,9 +227,32 @@ def _flatten(spb: str | Path | Blob) -> str:
     return filename_s
 
 
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _log_elapsed_time_on_error(copy_fn: Callable[P, R]) -> Callable[P, R]:
+    @functools.wraps(copy_fn)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        start = datetime.datetime.now()
+        try:
+            return copy_fn(*args, **kwargs)
+        except Exception:
+            # first positional arg of copy_fn is always src
+            src: str | Path | Blob = args[0]  # type: ignore
+            elapsed_time = datetime.datetime.now() - start
+            total_seconds = elapsed_time.total_seconds()
+            msg = f"Failed to copy {src!r} (attempt took {total_seconds:.6f}s)"
+            print(msg)
+            raise
+
+    return wrapper
+
+
 # --- COPY FUNCTION IMPLEMENTATIONS ---
 
 
+@_log_elapsed_time_on_error
 def _copy_file(src: str | Path, dst: str | Path, *, quiet: bool = False):
     """local file -> local file"""
     shutil.copy2(src, dst)
@@ -217,6 +260,7 @@ def _copy_file(src: str | Path, dst: str | Path, *, quiet: bool = False):
         _log_successful_copy(src, n=None, N=None)
 
 
+@_log_elapsed_time_on_error
 def _sync_files(src: str | Path, dst: str | Path, *, quiet: bool = False):
     """local dir -> local dir"""
 
@@ -240,6 +284,7 @@ def _sync_files(src: str | Path, dst: str | Path, *, quiet: bool = False):
                 _log_skipping_file(srcpath, n=i, N=len(srcpaths))
 
 
+@_log_elapsed_time_on_error
 def _download_file(
     src: str | Blob,
     dst: str | Path,
@@ -260,6 +305,7 @@ def _download_file(
         _log_successful_copy(_src)
 
 
+@_log_elapsed_time_on_error
 def _upload_file(
     src: str | Path,
     dst: str | Blob,
@@ -278,6 +324,7 @@ def _upload_file(
         _log_successful_copy(_src)
 
 
+@_log_elapsed_time_on_error
 def _download_dir(
     src: str | Blob,
     dst: str | Path,
@@ -310,6 +357,7 @@ def _download_dir(
                 _log_successful_copy(uri, n=i, N=len(future_to_uri))
 
 
+@_log_elapsed_time_on_error
 def _upload_dir(
     src: str | Path,
     dst: str | Blob,
@@ -343,6 +391,7 @@ def _upload_dir(
                 _log_successful_copy(filename, n=i, N=len(future_to_filename))
 
 
+@_log_elapsed_time_on_error
 def _copy_blob(
     src: str | Blob,
     dst: str | Blob,
@@ -363,6 +412,7 @@ def _copy_blob(
         _log_successful_copy(_dst)
 
 
+@_log_elapsed_time_on_error
 def _sync_blobs(
     src: str | Blob,
     dst: str | Blob,
