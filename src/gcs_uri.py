@@ -187,17 +187,6 @@ def _log_skipping_file(
     print(f"{prefix}Skipping {uri!r}")
 
 
-def _log_failed_copy(
-    src: str | Path | Blob,
-    *,
-    elapsed_time: datetime.timedelta | None = None,
-):
-    msg = f"ERROR: Failed to copy {src!r}"
-    if elapsed_time is not None:
-        msg += f" (copy attempt took {elapsed_time.total_seconds():.6f}s)"
-    print(msg)
-
-
 def _flatten(spb: str | Path | Blob) -> str:
     """Convert a URI (local or remote) to a flat filename.
 
