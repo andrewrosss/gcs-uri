@@ -33,6 +33,11 @@ else:
 
 __version__ = "1.2.0"
 
+# Resources describing the retry strategy:
+# https://cloud.google.com/storage/docs/retry-strategy#client-libraries
+# https://cloud.google.com/storage/docs/samples/storage-configure-retries
+# https://cloud.google.com/python/docs/reference/storage/latest/retry_timeout#configuring-retries
+
 # Custom retry with more rapid attempts as well as more time to retry
 _RETRY = DEFAULT_RETRY.with_deadline(600.0).with_delay(multiplier=1.2)
 
